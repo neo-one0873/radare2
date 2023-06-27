@@ -1140,6 +1140,7 @@ repeat:
 				(void)anal->iob.read_at (anal->iob.io, op->ptr, (ut8 *) dd, sizeof (dd));
 				// if page have exec perms
 				ut64 da = (ut64)r_read_ble32 (dd, R_ARCH_CONFIG_IS_BIG_ENDIAN (anal->config));
+#if 0
 				if (da != UT32_MAX && anal->iob.is_valid_offset (anal->iob.io, da, 0)) {
 					/// R2_590 - this must be CODE | READ , not CODE|DATA, but raises 10 fails
 					r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_DATA);

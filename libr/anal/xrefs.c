@@ -418,6 +418,7 @@ R_API int r_anal_ref_typemask(int x) {
 	const int maskedType = x & 0xff;
 	switch (maskedType) {
 	case R_ANAL_REF_TYPE_NULL:
+	case R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_DATA: // 'g' // XXX R2_590 - this is a conflictive type
 	case R_ANAL_REF_TYPE_CODE: // 'c' // code ref
 	case R_ANAL_REF_TYPE_CALL: // 'C' // code ref (call)
 	case R_ANAL_REF_TYPE_JUMP: // 'j' // code ref (call)
