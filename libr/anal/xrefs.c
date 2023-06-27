@@ -364,8 +364,11 @@ R_API const char *r_anal_ref_type_tostring(RAnalRefType type) {
 	case ' ':
 	case R_ANAL_REF_TYPE_NULL:
 		return "NULL";
+#if 0
+	/// XXX this is an invalid type, cant c|d coz results in 'g'
 	case R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_DATA:
 		return "ICOD"; // indirect code reference
+#endif
 	case R_ANAL_REF_TYPE_CODE:
 		return "CODE";
 	case R_ANAL_REF_TYPE_CALL:
@@ -374,9 +377,10 @@ R_API const char *r_anal_ref_type_tostring(RAnalRefType type) {
 		return "JUMP";
 	case R_ANAL_REF_TYPE_DATA:
 		return "DATA";
-	case R_ANAL_REF_TYPE_STRING:
+	case R_ANAL_REF_TYPE_STRN:
 		return "STRN";
 	default:
+		// R_LOG_ERROR("Invalid unknown ref type %c", R_ANAL_REF_TYPE_MASK (type));
 		return "UNKN";
 	}
 }

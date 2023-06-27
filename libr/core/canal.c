@@ -1996,9 +1996,8 @@ R_API bool r_core_anal_fcn(RCore *core, ut64 at, ut64 from, int reftype, int dep
 			// if the function was already analyzed as a "loc.",
 			// convert it to function and rename it to "fcn.",
 			// because we found a call to this address
-			int rt = R_ANAL_REF_TYPE_MASK (reftype);
-			int ft = R_ANAL_REF_TYPE_MASK (fcn->type);
-			if (rt == R_ANAL_REF_TYPE_CALL && ft == R_ANAL_FCN_TYPE_LOC) {
+			const int rt = R_ANAL_REF_TYPE_MASK (reftype);
+			if (rt == R_ANAL_REF_TYPE_CALL && fcn->type == R_ANAL_FCN_TYPE_LOC) {
 				function_rename (core->flags, fcn);
 			}
 			return 0;  // already analyzed function

@@ -546,19 +546,89 @@ static inline bool op_is_set_bp(const char *op_dst, const char *op_src, const ch
 }
 
 static inline bool does_arch_destroys_dst(const char *arch) {
-	return arch && (
-		r_str_startswith (arch, "arm") ||
-		!strcmp (arch, "riscv") ||
-		!strcmp (arch, "ppc")
-	);
+	return arch && (r_str_startswith (arch, "arm") ||
+			r_str_startswith (arch, "riscv") ||
+			r_str_startswith (arch, "ppc"));
 }
 
 static inline bool has_vars(RAnal *anal, ut64 addr) {
-	RAnalFunction *tmp_fcn = r_anal_get_fcn_in (anal, addr, 0);
-	if (tmp_fcn) {
-		return r_anal_var_count_all (tmp_fcn) > 0;
+	RAnalFunction *fcn = r_anal_get_fcn_in (anal, addr, 0);
+	return fcn && r_anal_var_count_all (fcn) > 0;
+}
+
+// TODO: move all this logic into RAnalKind !
+static int guess_xreftype(RAnal *anal, ut64 da) {
+	ut8 buf[64] = {0};
+	if (!anal->iob.read_at (anal->iob.io, da, buf, sizeof (buf))) {
+		R_LOG_ERROR ("Cannot read at 0x%08"PFMT64x, da);
+		return 0;
 	}
-	return false;
+	const char *kind = r_anal_data_kind (anal, da, buf, sizeof (buf));
+	if (!kind) {
+		return 0;
+	}
+	// TODO: move into RAnalKind
+	int i, zeros = 0;
+	// XXX move this into datakind
+	for (i = 0; i < R_MIN (8, sizeof (buf)); i++) {
+		if (buf[i] == 0 || buf[i] == 0xff) {
+			zeros++;
+		}
+	}
+	if (!strcmp (kind, "data")) {
+		// reduce false positives
+		RAnalOp op = {0};
+		int oplen = r_anal_op (anal, &op, da, buf, sizeof (buf), -1);
+		if (oplen > 2) {
+			if (op.type == R_ANAL_OP_TYPE_PUSH) {
+				kind = "code";
+			} else if (op.type == R_ANAL_OP_TYPE_RET) {
+				kind = "code";
+			} else if (r_anal_is_prelude (anal, da, buf, sizeof (buf))) {
+				kind = "code";
+			} else if (zeros > 2) {
+				kind = "data";
+			}
+		}
+		r_anal_op_fini (&op);
+	}
+	if (!strcmp (kind, "text")) {
+		// TODO: honor anal.strings
+		return R_ANAL_REF_TYPE_DATA | R_ANAL_REF_TYPE_READ;
+	}
+	if (!strcmp (kind, "data")) {
+		if (zeros > 1) {
+			return R_ANAL_REF_TYPE_DATA | R_ANAL_REF_TYPE_READ;
+		}
+		// check if destination is code or data.. data use to have null bytes
+		// return R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_READ;
+	}
+	if (strcmp (kind, "code")) {
+		R_LOG_DEBUG ("%s xref at 0x%08"PFMT64x, kind, da);
+		return R_ANAL_REF_TYPE_DATA | R_ANAL_REF_TYPE_READ;
+	}
+#if 0
+	{
+		// try to reduce false positives, but it actually increases them
+		RAnalOp op = {0};
+		int oplen = r_anal_op (anal, &op, da, buf, sizeof (buf), -1);
+		if (oplen > 2) {
+			if (op.type == R_ANAL_OP_TYPE_PUSH) {
+				kind = "code";
+			} else if (op.type == R_ANAL_OP_TYPE_RET) {
+				kind = "code";
+			} else if (r_anal_is_prelude (anal, da, buf, sizeof (buf))) {
+				kind = "code";
+			} else {
+				r_anal_op_fini (&op);
+				return R_ANAL_REF_TYPE_DATA | R_ANAL_REF_TYPE_READ;
+			}
+		}
+		r_anal_op_fini (&op);
+	}
+	// should be code i guess
+#endif
+	return R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_READ;
 }
 
 static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut64 len, int depth) {
@@ -1081,6 +1151,30 @@ repeat:
 						r_meta_set (anal, R_META_TYPE_DATA, op->ptr, 4, "");
 					}
 				}
+#else
+				// if (da != UT32_MAX && da != UT64_MAX && anal->iob.is_valid_offset (anal->iob.io, da, 0)) {
+				if (da != UT32_MAX && anal->iob.is_valid_offset (anal->iob.io, da, 0)) {
+					// int xreftype = R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_READ;
+					int xreftype = guess_xreftype (anal, da);
+					if (xreftype == 0) {
+						R_LOG_WARN ("Unknown xref type at 0x%08"PFMT64x, da);
+					}
+					r_anal_xrefs_set (anal, op->addr, da, xreftype);
+					r_meta_set (anal, R_META_TYPE_DATA, op->ptr, 4, "");
+				} else {
+					R_LOG_DEBUG ("Invalid refs 0x%08"PFMT64x" .. 0x%08"PFMT64x" .. 0x%08"PFMT64x" not adding", op->addr, op->ptr, da);
+					r_meta_set (anal, R_META_TYPE_DATA, op->ptr, 4, "");
+				}
+				// check if string then do data ref instead
+				// r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_READ);
+				// r_anal_xrefs_set (anal, op->addr, op->ptr, R_ANAL_REF_TYPE_DATA);
+				if (anal->opt.loads) {
+					// set this address as data if destination is not code
+					if (anal->iob.is_valid_offset (anal->iob.io, op->ptr, 0)) {
+						r_meta_set (anal, R_META_TYPE_DATA, op->ptr, 4, "");
+					}
+				}
+#endif
 			}
 			break;
 			// Case of valid but unused "add [rax], al"
@@ -1272,17 +1366,17 @@ repeat:
 			break;
 		case R_ANAL_OP_TYPE_CCALL:
 		case R_ANAL_OP_TYPE_CALL:
-			/* call dst */
-			(void) r_anal_xrefs_set (anal, op->addr, op->jump, R_ANAL_REF_TYPE_CALL | R_ANAL_REF_TYPE_EXEC);
+			 /* call dst */
+			 (void) r_anal_xrefs_set (anal, op->addr, op->jump, R_ANAL_REF_TYPE_CALL | R_ANAL_REF_TYPE_EXEC);
 
-			if (propagate_noreturn && r_anal_noreturn_at (anal, op->jump)) {
-				RAnalFunction *f = r_anal_get_function_at (anal, op->jump);
-				if (f) {
-					f->is_noreturn = true;
-				}
-				gotoBeach (R_ANAL_RET_END);
-			}
-			break;
+			 if (propagate_noreturn && r_anal_noreturn_at (anal, op->jump)) {
+				 RAnalFunction *f = r_anal_get_function_at (anal, op->jump);
+				 if (f) {
+					 f->is_noreturn = true;
+				 }
+				 gotoBeach (R_ANAL_RET_END);
+			 }
+			 break;
 		case R_ANAL_OP_TYPE_UJMP:
 		case R_ANAL_OP_TYPE_RJMP:
 			if (is_arm && anal->config->bits == 32 && last_is_mov_lr_pc) {
@@ -1311,8 +1405,8 @@ repeat:
 			// switch statement
 			if (anal->opt.jmptbl && anal->lea_jmptbl_ip != op->addr) {
 				ut8 buf[32]; // 32 bytes is enough to hold any instruction.
-				// op->ireg since rip relative addressing produces way too many false positives otherwise
-				// op->ireg is 0 for rip relative, "rax", etc otherwise
+					      // op->ireg since rip relative addressing produces way too many false positives otherwise
+					      // op->ireg is 0 for rip relative, "rax", etc otherwise
 				if (op->ptr != UT64_MAX && op->ireg) { // direct jump
 					ut64 table_size, default_case;
 					st64 case_shift = 0;
@@ -1390,7 +1484,7 @@ repeat:
 							table_size += anal->cmpval;
 						}
 						ret = try_walkthrough_jmptbl (anal, fcn, bb, depth - 1, op->addr, 0, op->addr + op->size,
-							op->addr + 4, 1, table_size, UT64_MAX, ret);
+								op->addr + 4, 1, table_size, UT64_MAX, ret);
 						// skip inlined jumptable
 						idx += table_size;
 					}
@@ -1400,10 +1494,10 @@ repeat:
 						if (pred_cmpval != UT64_MAX) {
 							tablesize += pred_cmpval;
 						} else {
-							tablesize += anal->cmpval;
+							 tablesize += anal->cmpval;
 						}
 						ret = try_walkthrough_jmptbl (anal, fcn, bb, depth - 1, op->addr, 0, op->addr + op->size,
-							op->addr + 4, 2, tablesize, UT64_MAX, ret);
+								op->addr + 4, 2, tablesize, UT64_MAX, ret);
 						// skip inlined jumptable
 						idx += (tablesize * 2);
 					}
@@ -1430,7 +1524,7 @@ analopfinish:
 				}
 			}
 			break;
-		/* fallthru */
+			/* fallthru */
 		case R_ANAL_OP_TYPE_PUSH:
 			last_is_push = true;
 			last_push_addr = op->val;
@@ -1440,7 +1534,7 @@ analopfinish:
 			break;
 		case R_ANAL_OP_TYPE_UPUSH:
 			if ((op->type & R_ANAL_OP_TYPE_REG) && last_is_reg_mov_lea && src0 && src0->reg
-				&& src0->reg && !strcmp (src0->reg, last_reg_mov_lea_name)) {
+					&& src0->reg && !strcmp (src0->reg, last_reg_mov_lea_name)) {
 				last_is_push = true;
 				last_push_addr = last_reg_mov_lea_val;
 				if (anal->iob.is_valid_offset (anal->iob.io, last_push_addr, 1)) {
@@ -1462,12 +1556,12 @@ analopfinish:
 			if (!op->cond) {
 				if (anal->verbose) {
 					R_LOG_DEBUG ("RET 0x%08"PFMT64x ". overlap=%s %"PFMT64u" %"PFMT64u,
-						addr + delay.un_idx - oplen, r_str_bool (overlapped),
-						bb->size, r_anal_function_linear_size (fcn));
+							addr + delay.un_idx - oplen, r_str_bool (overlapped),
+							bb->size, r_anal_function_linear_size (fcn));
 				}
 				gotoBeach (R_ANAL_RET_END);
-			}
-			break;
+			 }
+			 break;
 		}
 		if (has_stack_regs && arch_destroys_dst) {
 			if (op_is_set_bp (op_dst, op_src, bp_reg, sp_reg) && src1) {
