@@ -658,12 +658,22 @@ static int r_anal_analyze_fcn_refs(RCore *core, RAnalFunction *fcn, int depth) {
 			continue;
 		}
 		int rt = R_ANAL_REF_TYPE_MASK (ref->type);
-		if (rt == R_ANAL_REF_TYPE_DATA) {
+		switch (rt) {
+		case R_ANAL_REF_TYPE_DATA:
 			if (core->anal->opt.followdatarefs) {
 				r_anal_try_get_fcn (core, ref, depth, 2);
 			}
-		} else if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL) {
+			break;
+		case R_ANAL_REF_TYPE_ICOD:
+			// check if its used as data or code.. or at least check what's in the destination
+#if R2_590
 			r_core_anal_fcn (core, ref->addr, ref->at, ref->type, depth - 1);
+#endif
+			break;
+		case R_ANAL_REF_TYPE_CODE:
+		case R_ANAL_REF_TYPE_CALL:
+			r_core_anal_fcn (core, ref->addr, ref->at, ref->type, depth - 1);
+			break;
 		}
 		// TODO: fix memleak here, fcn not freed even though it is
 		// added in core->anal->fcns which is freed in r_anal_free ()
@@ -2986,7 +2996,7 @@ static int fcn_print_json(RCore *core, RAnalFunction *fcn, bool dorefs, PJ *pj) 
 			pj_a (pj);
 			r_list_foreach (xrefs, iter, refi) {
 				int rt = R_ANAL_REF_TYPE_MASK (refi->type);
-				if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL) {
+				if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL || rt == R_ANAL_REF_TYPE_ICOD) {
 					indegree++;
 					pj_o (pj);
 					pj_kn (pj, "addr", refi->addr);
@@ -3147,6 +3157,8 @@ static int fcn_print_detail(RCore *core, RAnalFunction *fcn) {
 			r_cons_printf ("axC 0x%"PFMT64x" 0x%"PFMT64x"\n", refi->addr, refi->at);
 		} else if (t == R_ANAL_REF_TYPE_DATA) {
 			r_cons_printf ("axd 0x%"PFMT64x" 0x%"PFMT64x"\n", refi->addr, refi->at);
+		} else if (t == R_ANAL_REF_TYPE_ICOD) {
+			r_cons_printf ("axi 0x%"PFMT64x" 0x%"PFMT64x"\n", refi->addr, refi->at);
 		} else if (t == R_ANAL_REF_TYPE_CODE) {
 			r_cons_printf ("axc 0x%"PFMT64x" 0x%"PFMT64x"\n", refi->addr, refi->at);
 		} else if (t == R_ANAL_REF_TYPE_STRING) {
@@ -3244,7 +3256,8 @@ static int fcn_print_legacy(RCore *core, RAnalFunction *fcn, bool dorefs) {
 			r_cons_printf ("\ncode-xrefs:");
 			r_list_foreach (xrefs, iter, refi) {
 				int rt = R_ANAL_REF_TYPE_MASK (refi->type);
-				if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL) {
+				// TODO: just check for the exec perm
+				if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL || rt == R_ANAL_REF_TYPE_ICOD) {
 					indegree++;
 					r_cons_printf (" 0x%08"PFMT64x" %c", refi->addr,
 							rt == R_ANAL_REF_TYPE_CALL? 'C': 'J');
@@ -3257,6 +3270,7 @@ static int fcn_print_legacy(RCore *core, RAnalFunction *fcn, bool dorefs) {
 		if (!r_list_empty (xrefs)) {
 			r_list_foreach (xrefs, iter, refi) {
 				int rt = R_ANAL_REF_TYPE_MASK (refi->type);
+				// TODO: just check for the exec perm
 				if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL) {
 					r_cons_printf (" 0x%08"PFMT64x" %c", refi->addr,
 							rt == R_ANAL_REF_TYPE_CALL?'C':'J');
@@ -4226,6 +4240,7 @@ static bool found_xref(RCore *core, ut64 at, ut64 xref_to, RAnalRefType type, PJ
 		// Display in radare commands format
 		char *cmd;
 		switch (type) {
+		case R_ANAL_REF_TYPE_ICOD: cmd = "axi"; break;
 		case R_ANAL_REF_TYPE_CODE: cmd = "axc"; break;
 		case R_ANAL_REF_TYPE_CALL: cmd = "axC"; break;
 		case R_ANAL_REF_TYPE_DATA: cmd = "axd"; break;

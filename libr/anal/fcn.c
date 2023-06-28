@@ -354,6 +354,7 @@ static void check_purity(HtUP *ht, RAnalFunction *fcn) {
 		switch (rt) {
 		case R_ANAL_REF_TYPE_CALL:
 		case R_ANAL_REF_TYPE_CODE:
+		case R_ANAL_REF_TYPE_ICOD:
 			{
 				RAnalFunction *called_fcn = r_anal_get_fcn_in (fcn->anal, ref->addr, 0);
 				if (!called_fcn) {
@@ -1698,6 +1699,7 @@ R_API void r_anal_trim_jmprefs(RAnal *anal, RAnalFunction *fcn) {
 
 	r_list_foreach (refs, iter, ref) {
 		int rt = R_ANAL_REF_TYPE_MASK (ref->type);
+		// TODO: honor REF_TYPE_ICOD too?
 		if (rt == R_ANAL_REF_TYPE_CODE && r_anal_function_contains (fcn, ref->addr)
 		    && (!is_x86 || !r_anal_function_contains (fcn, ref->at))) {
 			r_anal_xrefs_deln (anal, ref->at, ref->addr, ref->type);
@@ -1714,6 +1716,7 @@ R_API void r_anal_del_jmprefs(RAnal *anal, RAnalFunction *fcn) {
 
 	r_list_foreach (refs, iter, ref) {
 		int rt = R_ANAL_REF_TYPE_MASK (ref->type);
+		// TODO: honor REF_TYPE_ICOD too?
 		if (rt == R_ANAL_REF_TYPE_CODE) {
 			r_anal_xrefs_deln (anal, ref->at, ref->addr, ref->type);
 		}

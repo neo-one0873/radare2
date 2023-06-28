@@ -425,7 +425,8 @@ R_API int r_anal_ref_typemask(int x) {
 	case R_ANAL_REF_TYPE_CALL: // 'C' // code ref (call)
 	case R_ANAL_REF_TYPE_JUMP: // 'j' // code ref (call)
 	case R_ANAL_REF_TYPE_DATA: // 'd' // mem ref
-	case R_ANAL_REF_TYPE_STRN: // 's'  // string ref
+	case R_ANAL_REF_TYPE_STRN: // 's' // string ref
+	case R_ANAL_REF_TYPE_ICOD: // 'i' // indirect cod reference
 		return maskedType;
 	}
 	R_LOG_ERROR ("Invalid reftype mask '%c' (0x%02x)", x, x);
@@ -440,6 +441,7 @@ R_API RAnalRefType r_anal_xrefs_type(char ch) {
 	case R_ANAL_REF_TYPE_CALL:
 	case R_ANAL_REF_TYPE_DATA:
 	case R_ANAL_REF_TYPE_STRN:
+	case R_ANAL_REF_TYPE_ICOD:
 	case R_ANAL_REF_TYPE_NULL:
 		return (RAnalRefType)ch;
 	default:
