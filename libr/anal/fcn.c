@@ -556,6 +556,7 @@ static inline bool has_vars(RAnal *anal, ut64 addr) {
 	return fcn && r_anal_var_count_all (fcn) > 0;
 }
 
+#if 0
 // TODO: move all this logic into RAnalKind !
 static int guess_xreftype(RAnal *anal, ut64 da) {
 	ut8 buf[64] = {0};
@@ -630,6 +631,7 @@ static int guess_xreftype(RAnal *anal, ut64 da) {
 #endif
 	return R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_READ;
 }
+#endif
 
 static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut64 len, int depth) {
 	const char *variadic_reg = NULL;
@@ -1140,7 +1142,7 @@ repeat:
 				(void)anal->iob.read_at (anal->iob.io, op->ptr, (ut8 *) dd, sizeof (dd));
 				// if page have exec perms
 				ut64 da = (ut64)r_read_ble32 (dd, R_ARCH_CONFIG_IS_BIG_ENDIAN (anal->config));
-#if 0
+#if 1
 				if (da != UT32_MAX && anal->iob.is_valid_offset (anal->iob.io, da, 0)) {
 					/// R2_590 - this must be CODE | READ , not CODE|DATA, but raises 10 fails
 					r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_DATA);
