@@ -659,6 +659,7 @@ typedef enum {
 	R_ANAL_REF_TYPE_CALL = 'C', // code ref (call) -- maybe use 'k' for kall?
 	R_ANAL_REF_TYPE_JUMP = 'j', // code ref (call)
 	R_ANAL_REF_TYPE_DATA = 'd', // mem ref
+	R_ANAL_REF_TYPE_ICOD = 'k', // code mem ref // XXX badname, was code|data but should be code|read
 	R_ANAL_REF_TYPE_STRING = 's',  // string ref // R_DEPRECATE
 	R_ANAL_REF_TYPE_STRN = 's',  // string ref
 	// perm / direction

@@ -1145,7 +1145,8 @@ repeat:
 #if 1
 				if (da != UT32_MAX && anal->iob.is_valid_offset (anal->iob.io, da, 0)) {
 					/// R2_590 - this must be CODE | READ , not CODE|DATA, but raises 10 fails
-					r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_DATA);
+					// r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_DATA);
+					r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_ICOD | R_ANAL_REF_TYPE_EXEC);
 				}
 				r_anal_xrefs_set (anal, op->addr, op->ptr, R_ANAL_REF_TYPE_DATA);
 				if (anal->opt.loads) {
