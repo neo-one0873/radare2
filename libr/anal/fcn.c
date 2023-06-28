@@ -557,83 +557,6 @@ static inline bool has_vars(RAnal *anal, ut64 addr) {
 	return fcn && r_anal_var_count_all (fcn) > 0;
 }
 
-#if 0
-// TODO: move all this logic into RAnalKind !
-static int guess_xreftype(RAnal *anal, ut64 da) {
-	ut8 buf[64] = {0};
-	if (!anal->iob.read_at (anal->iob.io, da, buf, sizeof (buf))) {
-		R_LOG_ERROR ("Cannot read at 0x%08"PFMT64x, da);
-		return 0;
-	}
-	const char *kind = r_anal_data_kind (anal, da, buf, sizeof (buf));
-	if (!kind) {
-		return 0;
-	}
-	// TODO: move into RAnalKind
-	int i, zeros = 0;
-	// XXX move this into datakind
-	for (i = 0; i < R_MIN (8, sizeof (buf)); i++) {
-		if (buf[i] == 0 || buf[i] == 0xff) {
-			zeros++;
-		}
-	}
-	if (!strcmp (kind, "data")) {
-		// reduce false positives
-		RAnalOp op = {0};
-		int oplen = r_anal_op (anal, &op, da, buf, sizeof (buf), -1);
-		if (oplen > 2) {
-			if (op.type == R_ANAL_OP_TYPE_PUSH) {
-				kind = "code";
-			} else if (op.type == R_ANAL_OP_TYPE_RET) {
-				kind = "code";
-			} else if (r_anal_is_prelude (anal, da, buf, sizeof (buf))) {
-				kind = "code";
-			} else if (zeros > 2) {
-				kind = "data";
-			}
-		}
-		r_anal_op_fini (&op);
-	}
-	if (!strcmp (kind, "text")) {
-		// TODO: honor anal.strings
-		return R_ANAL_REF_TYPE_DATA | R_ANAL_REF_TYPE_READ;
-	}
-	if (!strcmp (kind, "data")) {
-		if (zeros > 1) {
-			return R_ANAL_REF_TYPE_DATA | R_ANAL_REF_TYPE_READ;
-		}
-		// check if destination is code or data.. data use to have null bytes
-		// return R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_READ;
-	}
-	if (strcmp (kind, "code")) {
-		R_LOG_DEBUG ("%s xref at 0x%08"PFMT64x, kind, da);
-		return R_ANAL_REF_TYPE_DATA | R_ANAL_REF_TYPE_READ;
-	}
-#if 0
-	{
-		// try to reduce false positives, but it actually increases them
-		RAnalOp op = {0};
-		int oplen = r_anal_op (anal, &op, da, buf, sizeof (buf), -1);
-		if (oplen > 2) {
-			if (op.type == R_ANAL_OP_TYPE_PUSH) {
-				kind = "code";
-			} else if (op.type == R_ANAL_OP_TYPE_RET) {
-				kind = "code";
-			} else if (r_anal_is_prelude (anal, da, buf, sizeof (buf))) {
-				kind = "code";
-			} else {
-				r_anal_op_fini (&op);
-				return R_ANAL_REF_TYPE_DATA | R_ANAL_REF_TYPE_READ;
-			}
-		}
-		r_anal_op_fini (&op);
-	}
-	// should be code i guess
-#endif
-	return R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_READ;
-}
-#endif
-
 static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut64 len, int depth) {
 	const char *variadic_reg = NULL;
 	ReadAhead ra = {0};
@@ -1143,43 +1066,33 @@ repeat:
 				(void)anal->iob.read_at (anal->iob.io, op->ptr, (ut8 *) dd, sizeof (dd));
 				// if page have exec perms
 				ut64 da = (ut64)r_read_ble32 (dd, R_ARCH_CONFIG_IS_BIG_ENDIAN (anal->config));
-#if 1
 				if (da != UT32_MAX && anal->iob.is_valid_offset (anal->iob.io, da, 0)) {
+				//if (da != UT32_MAX && da != UT64_MAX && anal->iob.is_valid_offset (anal->iob.io, da, 0)) {
 					/// R2_590 - this must be CODE | READ , not CODE|DATA, but raises 10 fails
+#if 0
 					// r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_DATA);
-					r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_ICOD | R_ANAL_REF_TYPE_EXEC);
-				}
-				r_anal_xrefs_set (anal, op->addr, op->ptr, R_ANAL_REF_TYPE_DATA);
-				if (anal->opt.loads) {
-					// set this address as data if destination is not code
-					if (anal->iob.is_valid_offset (anal->iob.io, op->ptr, 0)) {
-						r_meta_set (anal, R_META_TYPE_DATA, op->ptr, 4, "");
+					int t = r_anal_data_type (anal, op->ptr);
+					switch (R_ANAL_REF_TYPE_MASK (t)) {
+					case R_ANAL_REF_TYPE_CODE:
+						r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_EXEC);
+						break;
+					default:
+						r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_ICOD | R_ANAL_REF_TYPE_EXEC);
+						break;
 					}
-				}
-#else
-				// if (da != UT32_MAX && da != UT64_MAX && anal->iob.is_valid_offset (anal->iob.io, da, 0)) {
-				if (da != UT32_MAX && anal->iob.is_valid_offset (anal->iob.io, da, 0)) {
-					// int xreftype = R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_READ;
-					int xreftype = guess_xreftype (anal, da);
-					if (xreftype == 0) {
-						R_LOG_WARN ("Unknown xref type at 0x%08"PFMT64x, da);
-					}
-					r_anal_xrefs_set (anal, op->addr, da, xreftype);
-					r_meta_set (anal, R_META_TYPE_DATA, op->ptr, 4, "");
+#endif
+						r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_ICOD | R_ANAL_REF_TYPE_EXEC);
 				} else {
 					R_LOG_DEBUG ("Invalid refs 0x%08"PFMT64x" .. 0x%08"PFMT64x" .. 0x%08"PFMT64x" not adding", op->addr, op->ptr, da);
 					r_meta_set (anal, R_META_TYPE_DATA, op->ptr, 4, "");
+					r_anal_xrefs_set (anal, op->addr, op->ptr, R_ANAL_REF_TYPE_DATA);
 				}
-				// check if string then do data ref instead
-				// r_anal_xrefs_set (anal, op->addr, da, R_ANAL_REF_TYPE_CODE | R_ANAL_REF_TYPE_READ);
-				// r_anal_xrefs_set (anal, op->addr, op->ptr, R_ANAL_REF_TYPE_DATA);
 				if (anal->opt.loads) {
 					// set this address as data if destination is not code
 					if (anal->iob.is_valid_offset (anal->iob.io, op->ptr, 0)) {
 						r_meta_set (anal, R_META_TYPE_DATA, op->ptr, 4, "");
 					}
 				}
-#endif
 			}
 			break;
 			// Case of valid but unused "add [rax], al"

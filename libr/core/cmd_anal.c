@@ -5287,6 +5287,7 @@ static int cmd_af(RCore *core, const char *input) {
 								r_cons_printf ("0x%08" PFMT64x " ", ref->addr);
 								break;
 							case R_ANAL_REF_TYPE_CODE:
+							case R_ANAL_REF_TYPE_ICOD:
 							case R_ANAL_REF_TYPE_JUMP:
 							case R_ANAL_REF_TYPE_CALL:
 							case R_ANAL_REF_TYPE_DATA:

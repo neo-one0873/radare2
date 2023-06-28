@@ -648,7 +648,7 @@ static bool r_anal_try_get_fcn(RCore *core, RAnalRef *ref, int fcndepth, int ref
 	return 1;
 }
 
-static int r_anal_analyze_fcn_refs(RCore *core, RAnalFunction *fcn, int depth) {
+static void r_anal_analyze_fcn_refs(RCore *core, RAnalFunction *fcn, int depth) {
 	RListIter *iter;
 	RAnalRef *ref;
 	RList *refs = r_anal_function_get_refs (fcn);
@@ -666,7 +666,20 @@ static int r_anal_analyze_fcn_refs(RCore *core, RAnalFunction *fcn, int depth) {
 			break;
 		case R_ANAL_REF_TYPE_ICOD:
 			// check if its used as data or code.. or at least check what's in the destination
-#if R2_590
+			// R2_590 handling this data type check improve code analysis results!!
+			{
+				int t = r_anal_data_type (core->anal, ref->addr);
+				switch (R_ANAL_REF_TYPE_MASK (t)) {
+				case R_ANAL_REF_TYPE_ICOD:
+				case R_ANAL_REF_TYPE_CODE:
+					r_core_anal_fcn (core, ref->addr, ref->at, ref->type, depth - 1);
+					break;
+				case R_ANAL_REF_TYPE_DATA:
+				default:
+					break;
+				}
+			}
+#if 0
 			r_core_anal_fcn (core, ref->addr, ref->at, ref->type, depth - 1);
 #endif
 			break;
@@ -675,11 +688,8 @@ static int r_anal_analyze_fcn_refs(RCore *core, RAnalFunction *fcn, int depth) {
 			r_core_anal_fcn (core, ref->addr, ref->at, ref->type, depth - 1);
 			break;
 		}
-		// TODO: fix memleak here, fcn not freed even though it is
-		// added in core->anal->fcns which is freed in r_anal_free ()
 	}
 	r_list_free (refs);
-	return 1;
 }
 
 static void function_rename(RFlag *flags, RAnalFunction *fcn) {
@@ -899,11 +909,10 @@ static bool __core_anal_fcn(RCore *core, ut64 at, ut64 from, int reftype, int de
 					}
 				}
 			}
-			if (!r_anal_analyze_fcn_refs (core, fcn, depth)) {
-				goto error;
-			}
+			r_anal_analyze_fcn_refs (core, fcn, depth);
 		}
 	} while (fcnlen != R_ANAL_RET_END);
+
 	r_list_free (core->anal->leaddrs);
 	core->anal->leaddrs = NULL;
 	if (has_next) {
