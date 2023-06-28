@@ -666,22 +666,19 @@ static void r_anal_analyze_fcn_refs(RCore *core, RAnalFunction *fcn, int depth) 
 			break;
 		case R_ANAL_REF_TYPE_ICOD:
 			// check if its used as data or code.. or at least check what's in the destination
-			// R2_590 handling this data type check improve code analysis results!!
 			{
-				int t = r_anal_data_type (core->anal, ref->addr);
+				const int t = r_anal_data_type (core->anal, ref->addr);
 				switch (R_ANAL_REF_TYPE_MASK (t)) {
 				case R_ANAL_REF_TYPE_ICOD:
 				case R_ANAL_REF_TYPE_CODE:
 					r_core_anal_fcn (core, ref->addr, ref->at, ref->type, depth - 1);
 					break;
 				case R_ANAL_REF_TYPE_DATA:
+					// TODO: maybe check if the contents of dst is a pointer to code
 				default:
 					break;
 				}
 			}
-#if 0
-			r_core_anal_fcn (core, ref->addr, ref->at, ref->type, depth - 1);
-#endif
 			break;
 		case R_ANAL_REF_TYPE_CODE:
 		case R_ANAL_REF_TYPE_CALL:

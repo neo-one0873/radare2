@@ -428,6 +428,8 @@ R_API int r_anal_ref_typemask(int x) {
 	case R_ANAL_REF_TYPE_STRN: // 's' // string ref
 	case R_ANAL_REF_TYPE_ICOD: // 'i' // indirect cod reference
 		return maskedType;
+	case ' ':
+		return R_ANAL_REF_TYPE_CODE;
 	}
 	R_LOG_ERROR ("Invalid reftype mask '%c' (0x%02x)", x, x);
 	// SHOULD NEVER HAPPEN MAYBE WARN HERE
